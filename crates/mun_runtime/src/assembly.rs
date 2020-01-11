@@ -2,9 +2,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::DispatchTable;
+use abi::AssemblyInfo;
 use failure::Error;
 use libloading::Symbol;
-use mun_abi::AssemblyInfo;
 
 mod temp_library;
 

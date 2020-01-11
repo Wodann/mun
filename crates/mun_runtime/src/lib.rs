@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
+use abi::{FunctionInfo, Reflection, StructInfo};
 use failure::Error;
-use mun_abi::{FunctionInfo, Reflection, StructInfo};
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
 pub use crate::assembly::Assembly;
