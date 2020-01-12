@@ -14,6 +14,37 @@ pub trait Reflection: 'static {
     fn type_name() -> &'static str;
 }
 
+/// A type to emulate dynamic typing across compilation units for statically typed values.
+pub trait ArgumentReflection {
+    /// The resulting type after dereferencing.
+    type Marshalled: Sized;
+
+    /// Retrieves the `Guid` of the value's type.
+    fn type_guid(&self) -> Guid {
+        Guid {
+            b: md5::compute(self.type_name()).0,
+        }
+    }
+
+    /// Retrieves the name of the value's type.
+    fn type_name(&self) -> &str;
+
+    /// Marshalls the value.
+    fn marshall(self) -> Self::Marshalled;
+}
+
+impl<T: Reflection> ArgumentReflection for T {
+    type Marshalled = Self;
+
+    fn type_name(&self) -> &str {
+        <T as Reflection>::type_name()
+    }
+
+    fn marshall(self) -> Self::Marshalled {
+        self
+    }
+}
+
 impl Reflection for f64 {
     fn type_name() -> &'static str {
         "@core::float"

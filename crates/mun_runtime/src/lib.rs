@@ -7,6 +7,7 @@
 mod assembly;
 #[macro_use]
 mod macros;
+mod r#struct;
 
 #[cfg(test)]
 mod test;
@@ -17,11 +18,12 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
-use abi::{FunctionInfo, Reflection, StructInfo};
+use abi::{ArgumentReflection, FunctionInfo, Reflection, StructInfo, TypeInfo};
 use failure::Error;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
 pub use crate::assembly::Assembly;
+pub use crate::r#struct::Struct;
 
 /// Options for the construction of a [`Runtime`].
 #[derive(Clone, Debug)]
@@ -198,6 +200,13 @@ impl Runtime {
         }
         false
     }
+}
+
+/// Used to do value-to-value conversions while consuming the input value that require runtime type
+/// information.
+pub trait RuntimeInto<T>: Sized {
+    /// Performs the conversion.
+    fn runtime_into(self, runtime: &Runtime, type_info: TypeInfo) -> T;
 }
 
 /// Extends a result object with functions that allow retrying of an action.
