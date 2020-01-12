@@ -12,6 +12,7 @@ description = "A runtime for hot reloading and invoking Mun from Rust"
 failure = "0.1.5"
 libloading = "0.5"
 abi = { path = "../mun_abi", package = "mun_abi" }
+md5 = "0.6.1"
 notify = "4.0.12"
 parking_lot = "0.9"
 tempfile = "3"

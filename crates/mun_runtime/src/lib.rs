@@ -7,6 +7,9 @@
 mod assembly;
 #[macro_use]
 mod macros;
+mod marshal;
+mod reflection;
+mod r#struct;
 
 #[cfg(test)]
 mod test;
@@ -17,11 +20,15 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
-use abi::{FunctionInfo, Reflection, StructInfo};
+use abi::{FunctionInfo, StructInfo};
 use failure::Error;
 use notify::{DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 
+pub use crate::marshal::MarshalInto;
+pub use crate::reflection::{ArgumentReflection, ReturnTypeReflection};
+
 pub use crate::assembly::Assembly;
+pub use crate::r#struct::Struct;
 
 /// Options for the construction of a [`Runtime`].
 #[derive(Clone, Debug)]

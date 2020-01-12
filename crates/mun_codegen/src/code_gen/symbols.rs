@@ -230,9 +230,8 @@ fn gen_struct_info_array<'a, D: IrDatabase>(
             let field_types = fields.iter().map(|field| field.ty(db));
             let (field_types, _) = gen_type_info_array(db, module, types, field_types);
 
-            let field_offsets = (0..fields.len())
-                .into_iter()
-                .map(|idx| target_data.offset_of_element(t, idx as u32).unwrap());
+            let field_offsets =
+                (0..fields.len()).map(|idx| target_data.offset_of_element(t, idx as u32).unwrap());
             let (field_offsets, _) = gen_u16_array(module, field_offsets);
 
             let field_sizes = fields
