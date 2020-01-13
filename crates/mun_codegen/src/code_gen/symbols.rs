@@ -3,6 +3,7 @@ use crate::ir::dispatch_table::DispatchTable;
 use crate::ir::function;
 use crate::values::{BasicValue, GlobalValue};
 use crate::IrDatabase;
+use abi::TypeGroup;
 use hir::{Ty, TypeCtor};
 use inkwell::{
     attributes::Attribute,
@@ -21,6 +22,7 @@ pub type Guid = [u8; 16];
 pub struct TypeInfo {
     pub guid: Guid,
     pub name: String,
+    pub group: TypeGroup,
 }
 
 impl Hash for TypeInfo {
@@ -36,10 +38,11 @@ impl PartialEq for TypeInfo {
 }
 
 impl TypeInfo {
-    fn from_name<S: AsRef<str>>(name: S) -> TypeInfo {
+    fn new<S: AsRef<str>>(name: S, group: TypeGroup) -> TypeInfo {
         TypeInfo {
             name: name.as_ref().to_string(),
             guid: md5::compute(name.as_ref()).0,
+            group,
         }
     }
 }
@@ -47,10 +50,10 @@ impl TypeInfo {
 pub fn type_info_query(db: &impl IrDatabase, ty: Ty) -> TypeInfo {
     match ty {
         Ty::Apply(ctor) => match ctor.ctor {
-            TypeCtor::Float => TypeInfo::from_name("@core::float"),
-            TypeCtor::Int => TypeInfo::from_name("@core::int"),
-            TypeCtor::Bool => TypeInfo::from_name("@core::bool"),
-            TypeCtor::Struct(s) => TypeInfo::from_name(s.name(db).to_string()),
+            TypeCtor::Float => TypeInfo::new("@core::float", TypeGroup::FundamentalTypes),
+            TypeCtor::Int => TypeInfo::new("@core::int", TypeGroup::FundamentalTypes),
+            TypeCtor::Bool => TypeInfo::new("@core::bool", TypeGroup::FundamentalTypes),
+            TypeCtor::Struct(s) => TypeInfo::new(s.name(db).to_string(), TypeGroup::StructTypes),
             _ => unreachable!("{:?} unhandled", ctor),
         },
         _ => unreachable!(),
@@ -66,6 +69,7 @@ fn type_info_ir(ty: &TypeInfo, module: &Module) -> StructValue {
         &[
             context.i8_type().const_array(&guid_values).into(),
             intern_string(module, &ty.name).into(),
+            context.i8_type().const_int(ty.group as u64, false).into(),
         ],
         false,
     )
