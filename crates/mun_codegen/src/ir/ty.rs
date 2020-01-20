@@ -1,8 +1,57 @@
+use super::adt;
 use super::try_convert_any_to_basic;
 use crate::IrDatabase;
+use abi::Guid;
 use hir::{ApplicationTy, CallableDef, Ty, TypeCtor};
 use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::AddressSpace;
+use std::hash::{Hash, Hasher};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TypeGroup {
+    FundamentalTypes,
+    StructTypes(hir::Struct, StructType),
+}
+
+impl From<TypeGroup> for u64 {
+    fn from(group: TypeGroup) -> Self {
+        match group {
+            TypeGroup::FundamentalTypes => 0,
+            TypeGroup::StructTypes(_, _) => 1,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq)]
+pub struct TypeInfo {
+    pub guid: Guid,
+    pub name: String,
+    pub group: TypeGroup,
+}
+
+impl Hash for TypeInfo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write(&self.guid.b)
+    }
+}
+
+impl PartialEq for TypeInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.guid == other.guid
+    }
+}
+
+impl TypeInfo {
+    fn new<S: AsRef<str>>(name: S, group: TypeGroup) -> TypeInfo {
+        TypeInfo {
+            name: name.as_ref().to_string(),
+            guid: Guid {
+                b: md5::compute(name.as_ref()).0,
+            },
+            group,
+        }
+    }
+}
 
 /// Given a mun type, construct an LLVM IR type
 pub(crate) fn ir_query(db: &impl IrDatabase, ty: Ty) -> AnyTypeEnum {
@@ -47,4 +96,21 @@ pub(crate) fn ir_query(db: &impl IrDatabase, ty: Ty) -> AnyTypeEnum {
 pub fn struct_ty_query(db: &impl IrDatabase, s: hir::Struct) -> StructType {
     let name = s.name(db).to_string();
     db.context().opaque_struct_type(&name)
+}
+
+/// Constructs the `TypeInfo` for the specified HIR type
+pub fn type_info_query(db: &impl IrDatabase, ty: Ty) -> TypeInfo {
+    match ty {
+        Ty::Apply(ctor) => match ctor.ctor {
+            TypeCtor::Float => TypeInfo::new("@core::float", TypeGroup::FundamentalTypes),
+            TypeCtor::Int => TypeInfo::new("@core::int", TypeGroup::FundamentalTypes),
+            TypeCtor::Bool => TypeInfo::new("@core::bool", TypeGroup::FundamentalTypes),
+            TypeCtor::Struct(s) => {
+                let t = adt::gen_struct_decl(db, s);
+                TypeInfo::new(s.name(db).to_string(), TypeGroup::StructTypes(s, t))
+            }
+            _ => unreachable!("{:?} unhandled", ctor),
+        },
+        _ => unreachable!(),
+    }
 }

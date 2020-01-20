@@ -1,8 +1,8 @@
 use crate::ir::dispatch_table::{DispatchTable, DispatchTableBuilder};
-use crate::ir::{adt, function};
+use crate::ir::{function, ty::TypeInfo};
 use crate::IrDatabase;
 use hir::{FileId, ModuleDef};
-use inkwell::{module::Module, types::StructType, values::FunctionValue};
+use inkwell::{module::Module, values::FunctionValue};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -17,8 +17,8 @@ pub struct ModuleIR {
     /// A mapping from HIR functions to LLVM IR values
     pub functions: HashMap<hir::Function, FunctionValue>,
 
-    /// A mapping from HIR structs to LLVM IR types
-    pub structs: HashMap<hir::Struct, StructType>,
+    /// A mapping from HIR types to LLVM IR values
+    pub types: HashMap<hir::Ty, TypeInfo>,
 
     /// The dispatch table
     pub dispatch_table: DispatchTable,
@@ -31,11 +31,27 @@ pub(crate) fn ir_query(db: &impl IrDatabase, file_id: FileId) -> Arc<ModuleIR> {
         .create_module(db.file_relative_path(file_id).as_str());
 
     // Generate all type definitions
-    let mut structs = HashMap::new();
+    let mut types = HashMap::new();
+
+    // Add fundamental types manually
+    {
+        let ty = hir::Ty::simple(hir::TypeCtor::Bool);
+        types.insert(ty.clone(), db.type_info(ty));
+    }
+    {
+        let ty = hir::Ty::simple(hir::TypeCtor::Float);
+        types.insert(ty.clone(), db.type_info(ty));
+    }
+    {
+        let ty = hir::Ty::simple(hir::TypeCtor::Int);
+        types.insert(ty.clone(), db.type_info(ty));
+    }
+
     for def in db.module_data(file_id).definitions() {
         match def {
             ModuleDef::Struct(s) => {
-                structs.insert(*s, adt::gen_struct_decl(db, *s));
+                let ty = s.ty(db);
+                types.entry(ty.clone()).or_insert_with(|| db.type_info(ty));
             }
             ModuleDef::BuiltinType(_) | ModuleDef::Function(_) => (),
         }
@@ -83,7 +99,7 @@ pub(crate) fn ir_query(db: &impl IrDatabase, file_id: FileId) -> Arc<ModuleIR> {
         file_id,
         llvm_module,
         functions,
-        structs,
+        types,
         dispatch_table,
     })
 }
