@@ -13,7 +13,7 @@ use std::os::raw::c_char;
 use crate::error::ErrorHandle;
 use crate::hub::HUB;
 use failure::err_msg;
-use mun_abi::FunctionInfo;
+use mun_abi::{FunctionInfo, StructInfo, TypeInfo};
 use mun_runtime::{Runtime, RuntimeBuilder};
 
 pub(crate) type Token = usize;
