@@ -1,4 +1,3 @@
-use super::adt;
 use super::try_convert_any_to_basic;
 use crate::IrDatabase;
 use abi::Guid;
@@ -95,7 +94,21 @@ pub(crate) fn ir_query(db: &impl IrDatabase, ty: Ty) -> AnyTypeEnum {
 /// Returns the LLVM IR type of the specified struct
 pub fn struct_ty_query(db: &impl IrDatabase, s: hir::Struct) -> StructType {
     let name = s.name(db).to_string();
-    db.context().opaque_struct_type(&name)
+    let struct_type = db.context().opaque_struct_type(&name);
+    if struct_type.is_opaque() {
+        let field_types: Vec<BasicTypeEnum> = s
+            .fields(db)
+            .iter()
+            .map(|field| {
+                let field_type = field.ty(db);
+                try_convert_any_to_basic(db.type_ir(field_type))
+                    .expect("could not convert field type")
+            })
+            .collect();
+
+        struct_type.set_body(&field_types, false);
+    }
+    struct_type
 }
 
 /// Constructs the `TypeInfo` for the specified HIR type
@@ -105,10 +118,10 @@ pub fn type_info_query(db: &impl IrDatabase, ty: Ty) -> TypeInfo {
             TypeCtor::Float => TypeInfo::new("@core::float", TypeGroup::FundamentalTypes),
             TypeCtor::Int => TypeInfo::new("@core::int", TypeGroup::FundamentalTypes),
             TypeCtor::Bool => TypeInfo::new("@core::bool", TypeGroup::FundamentalTypes),
-            TypeCtor::Struct(s) => {
-                let t = adt::gen_struct_decl(db, s);
-                TypeInfo::new(s.name(db).to_string(), TypeGroup::StructTypes(s, t))
-            }
+            TypeCtor::Struct(s) => TypeInfo::new(
+                s.name(db).to_string(),
+                TypeGroup::StructTypes(s, db.struct_ty(s)),
+            ),
             _ => unreachable!("{:?} unhandled", ctor),
         },
         _ => unreachable!(),
