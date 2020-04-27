@@ -61,6 +61,8 @@ impl PartialEq for TypeInfo {
     }
 }
 
+impl Eq for TypeInfo {}
+
 impl std::hash::Hash for TypeInfo {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.guid.hash(state);
@@ -212,7 +214,7 @@ impl ModuleInfo {
     }
 
     /// Returns the module's types.
-    pub fn types(&self) -> &[&TypeInfo] {
+    pub fn types<'r>(&self) -> &[&'r TypeInfo] {
         if self.num_types == 0 {
             &[]
         } else {

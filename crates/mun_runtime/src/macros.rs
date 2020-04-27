@@ -16,36 +16,36 @@ macro_rules! invoke_fn_impl {
             /// An invocation error that contains the function name, a mutable reference to the
             /// runtime, passed arguments, and the output type. This allows the caller to retry
             /// the function invocation using the `Retriable` trait.
-            pub struct $ErrName<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> {
+            pub struct $ErrName<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> {
                 msg: String,
-                runtime: std::rc::Rc<core::cell::RefCell<Runtime>>,
+                runtime: std::rc::Rc<core::cell::RefCell<Runtime<'r>>>,
                 function_name: &'s str,
                 $($Arg: $T,)*
                 output: core::marker::PhantomData<Output>,
             }
 
-            impl<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> core::fmt::Debug for $ErrName<'s, $($T,)* Output> {
+            impl<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> core::fmt::Debug for $ErrName<'r, 's, $($T,)* Output> {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                     write!(f, "{}", &self.msg)
                 }
             }
 
-            impl<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> core::fmt::Display for $ErrName<'s, $($T,)* Output> {
+            impl<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> core::fmt::Display for $ErrName<'r, 's, $($T,)* Output> {
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                     write!(f, "{}", &self.msg)
                 }
             }
 
-            impl<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> std::error::Error for $ErrName<'s, $($T,)* Output> {
+            impl<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> std::error::Error for $ErrName<'r, 's, $($T,)* Output> {
                 fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
                     None
                 }
             }
 
-            impl<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> $ErrName<'s, $($T,)* Output> {
+            impl<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> $ErrName<'r, 's, $($T,)* Output> {
                 /// Constructs a new invocation error.
                 #[allow(clippy::too_many_arguments)]
-                pub fn new(err_msg: String, runtime: std::rc::Rc<core::cell::RefCell<Runtime>>, function_name: &'s str, $($Arg: $T),*) -> Self {
+                pub fn new(err_msg: String, runtime: std::rc::Rc<core::cell::RefCell<Runtime<'r>>>, function_name: &'s str, $($Arg: $T),*) -> Self {
                     Self {
                         msg: err_msg,
                         runtime,
@@ -56,7 +56,7 @@ macro_rules! invoke_fn_impl {
                 }
             }
 
-            impl<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection> $crate::RetryResultExt for core::result::Result<Output, $ErrName<'s, $($T,)* Output>> {
+            impl<'r, 's, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>> $crate::RetryResultExt for core::result::Result<Output, $ErrName<'r, 's, $($T,)* Output>> {
                 type Output = Output;
 
                 fn retry(self) -> Self {
@@ -83,18 +83,18 @@ macro_rules! invoke_fn_impl {
                 }
             }
 
-            impl Runtime {
+            impl<'r> Runtime<'r> {
                 /// Invokes the method `method_name` with arguments `args`, in the library compiled
                 /// based on the manifest at `manifest_path`.
                 ///
                 /// If an error occurs when invoking the method, an error message is logged. The
                 /// runtime continues looping until the cause of the error has been resolved.
                 #[allow(clippy::too_many_arguments, unused_assignments)]
-                pub fn $FnName<'s, $($T: ArgumentReflection,)* Output: ReturnTypeReflection>(
-                    runtime: &std::rc::Rc<core::cell::RefCell<Runtime>>,
+                pub fn $FnName<'s, $($T: ArgumentReflection<'r>,)* Output: ReturnTypeReflection<'r>>(
+                    runtime: &std::rc::Rc<core::cell::RefCell<Self>>,
                     function_name: &'s str,
                     $($Arg: $T,)*
-                ) -> core::result::Result<Output, $ErrName<'s, $($T,)* Output>> {
+                ) -> core::result::Result<Output, $ErrName<'r, 's, $($T,)* Output>> {
                     let runtime_ref = runtime.borrow();
                     match runtime_ref
                         .get_function_info(function_name)

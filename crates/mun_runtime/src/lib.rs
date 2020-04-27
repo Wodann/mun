@@ -84,7 +84,7 @@ impl RuntimeBuilder {
     }
 
     /// Spawns a [`Runtime`] with the builder's options.
-    pub fn spawn(self) -> Result<Runtime, Error> {
+    pub fn spawn<'r>(self) -> Result<Runtime<'r>, Error> {
         Runtime::new(self.options)
     }
 }
@@ -159,13 +159,14 @@ impl DispatchTable {
 }
 
 /// A runtime for the Mun language.
-pub struct Runtime {
-    assemblies: HashMap<PathBuf, Assembly>,
+pub struct Runtime<'r> {
+    assemblies: HashMap<PathBuf, Assembly<'r>>,
     dispatch_table: DispatchTable,
     watcher: RecommendedWatcher,
     watcher_rx: Receiver<DebouncedEvent>,
-    gc: Arc<GarbageCollector>,
+    gc: Arc<GarbageCollector<'r>>,
     _user_functions: Vec<abi::FunctionInfoStorage>,
+    _lifetime: std::marker::PhantomData<&'r ()>,
 }
 
 /// Retrieve the allocator using the provided handle.
@@ -174,7 +175,7 @@ pub struct Runtime {
 ///
 /// The allocator must have been set using the `set_allocator_handle` call - exposed by the Mun
 /// library.
-unsafe fn get_allocator(alloc_handle: *mut ffi::c_void) -> Arc<GarbageCollector> {
+unsafe fn get_allocator<'r>(alloc_handle: *mut ffi::c_void) -> Arc<GarbageCollector<'r>> {
     Arc::from_raw(alloc_handle as *const GarbageCollector)
 }
 
@@ -182,8 +183,11 @@ extern "C" fn new(
     type_info: *const abi::TypeInfo,
     alloc_handle: *mut ffi::c_void,
 ) -> *const *mut ffi::c_void {
-    let allocator = unsafe { get_allocator(alloc_handle) };
-    let handle = allocator.alloc(type_info.into());
+    // Safety: `new` is only called from within Mun assemblies' core logic, so we are guaranteed
+    // that the `Runtime` and its `GarbageCollector` still exist if this function is called, and
+    // will continue to do so for the duration of this function.
+    let allocator = unsafe { get_allocator::<'static>(alloc_handle) };
+    let handle = allocator.alloc(unsafe { type_info.as_ref().unwrap() });
 
     // Prevent destruction of the allocator
     mem::forget(allocator);
@@ -191,11 +195,11 @@ extern "C" fn new(
     handle.into()
 }
 
-impl Runtime {
+impl<'r> Runtime<'r> {
     /// Constructs a new `Runtime` that loads the library at `library_path` and its
     /// dependencies. The `Runtime` contains a file watcher that is triggered with an interval
     /// of `dur`.
-    pub fn new(options: RuntimeOptions) -> Result<Runtime, Error> {
+    pub fn new(options: RuntimeOptions) -> Result<Self, Error> {
         let (tx, rx) = channel();
 
         let mut dispatch_table = DispatchTable::default();
@@ -207,13 +211,14 @@ impl Runtime {
         }
 
         let watcher: RecommendedWatcher = Watcher::new(tx, options.delay)?;
-        let mut runtime = Runtime {
+        let mut runtime = Self {
             assemblies: HashMap::new(),
             dispatch_table,
             watcher,
             watcher_rx: rx,
             gc: Arc::new(self::garbage_collector::GarbageCollector::default()),
             _user_functions: storages,
+            _lifetime: std::marker::PhantomData,
         };
 
         runtime.add_assembly(&options.library_path)?;
@@ -278,7 +283,7 @@ impl Runtime {
     ///
     /// We cannot return an `Arc` here, because the lifetime of data contained in `GarbageCollector`
     /// is dependent on the `Runtime`.
-    pub(crate) fn gc(&self) -> &GarbageCollector {
+    pub(crate) fn gc(&self) -> &GarbageCollector<'r> {
         self.gc.as_ref()
     }
 

@@ -33,3 +33,44 @@ pub trait TypeFields<T>: Send + Sync {
     /// Returns the type's fields' offsets.
     fn offsets(&self) -> &[u16];
 }
+
+impl<'t> TypeDesc for &'t abi::TypeInfo {
+    fn name(&self) -> &str {
+        abi::TypeInfo::name(self)
+    }
+
+    fn guid(&self) -> &abi::Guid {
+        &self.guid
+    }
+
+    fn group(&self) -> abi::TypeGroup {
+        self.group
+    }
+}
+
+impl<'t> TypeFields<Self> for &'t abi::TypeInfo {
+    fn fields(&self) -> Vec<(&str, Self)> {
+        if let Some(s) = self.as_struct() {
+            s.field_names()
+                .zip(s.field_types().iter().cloned())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn offsets(&self) -> &[u16] {
+        if let Some(s) = self.as_struct() {
+            s.field_offsets()
+        } else {
+            &[]
+        }
+    }
+}
+
+impl<'a> TypeLayout for &'a abi::TypeInfo {
+    fn layout(&self) -> Layout {
+        Layout::from_size_align(self.size_in_bytes(), self.alignment())
+            .unwrap_or_else(|_| panic!("invalid layout from Mun Type: {:?}", self))
+    }
+}

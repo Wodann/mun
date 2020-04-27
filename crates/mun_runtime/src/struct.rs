@@ -27,19 +27,17 @@ impl RawStruct {
 
 /// Type-agnostic wrapper for interoperability with a Mun struct.
 /// TODO: Handle destruction of `struct(value)`
-pub struct StructRef {
-    handle: GcRootPtr,
-    runtime: Rc<RefCell<Runtime>>,
+pub struct StructRef<'r> {
+    handle: GcRootPtr<'r>,
+    runtime: Rc<RefCell<Runtime<'r>>>,
 }
 
-impl StructRef {
+impl<'s> StructRef<'s> {
     /// Creates a `StructRef` that wraps a raw Mun struct.
-    fn new(runtime: Rc<RefCell<Runtime>>, raw: RawStruct) -> Self {
+    fn new(runtime: Rc<RefCell<Runtime<'s>>>, raw: RawStruct) -> Self {
         let handle = {
             let runtime_ref = runtime.borrow();
-            assert!(unsafe { &*runtime_ref.gc().ptr_type(raw.0).inner() }
-                .group
-                .is_struct());
+            assert!(runtime_ref.gc().ptr_type(raw.0).group.is_struct());
 
             GcRootPtr::new(&runtime_ref.gc, raw.0)
         };
@@ -53,10 +51,8 @@ impl StructRef {
     }
 
     /// Returns the type information of the struct.
-    pub fn type_info<'r>(struct_ref: &Self, runtime_ref: &'r Runtime) -> &'r abi::TypeInfo {
-        // Safety: The lifetime of `TypeInfo` is tied to the lifetime of `Runtime` and thus the
-        // underlying pointer cannot change during the lifetime of the shared reference.
-        unsafe { &*runtime_ref.gc.ptr_type(struct_ref.handle.handle()).inner() }
+    pub fn type_info<'t>(struct_ref: &Self, runtime_ref: &'t Runtime<'s>) -> &'t abi::TypeInfo {
+        runtime_ref.gc.ptr_type(struct_ref.handle.handle())
     }
 
     ///
@@ -75,9 +71,9 @@ impl StructRef {
     }
 
     /// Retrieves the value of the field corresponding to the specified `field_name`.
-    pub fn get<T: ReturnTypeReflection>(&self, field_name: &str) -> Result<T, String> {
+    pub fn get<T: ReturnTypeReflection<'s>>(&self, field_name: &str) -> Result<T, String> {
         let runtime_ref = self.runtime.borrow();
-        let type_info = Self::type_info(self, &runtime_ref);
+        let type_info = runtime_ref.gc.ptr_type(self.handle.handle());
 
         // Safety: `as_struct` is guaranteed to return `Some` for `StructRef`s.
         let struct_info = type_info.as_struct().unwrap();
@@ -109,13 +105,13 @@ impl StructRef {
 
     /// Replaces the value of the field corresponding to the specified `field_name` and returns the
     /// old value.
-    pub fn replace<T: ArgumentReflection>(
+    pub fn replace<T: ArgumentReflection<'s>>(
         &mut self,
         field_name: &str,
         value: T,
     ) -> Result<T, String> {
         let runtime_ref = self.runtime.borrow();
-        let type_info = Self::type_info(self, &runtime_ref);
+        let type_info = runtime_ref.gc.ptr_type(self.handle.handle());
 
         // Safety: `as_struct` is guaranteed to return `Some` for `StructRef`s.
         let struct_info = type_info.as_struct().unwrap();
@@ -143,9 +139,13 @@ impl StructRef {
     }
 
     /// Sets the value of the field corresponding to the specified `field_name`.
-    pub fn set<T: ArgumentReflection>(&mut self, field_name: &str, value: T) -> Result<(), String> {
+    pub fn set<T: ArgumentReflection<'s>>(
+        &mut self,
+        field_name: &str,
+        value: T,
+    ) -> Result<(), String> {
         let runtime_ref = self.runtime.borrow();
-        let type_info = Self::type_info(self, &runtime_ref);
+        let type_info = runtime_ref.gc.ptr_type(self.handle.handle());
 
         // Safety: `as_struct` is guaranteed to return `Some` for `StructRef`s.
         let struct_info = type_info.as_struct().unwrap();
@@ -172,16 +172,16 @@ impl StructRef {
     }
 }
 
-impl ArgumentReflection for StructRef {
+impl<'r> ArgumentReflection<'r> for StructRef<'r> {
     type Marshalled = RawStruct;
 
-    fn type_guid(&self, runtime: &Runtime) -> abi::Guid {
-        let type_info = unsafe { &*runtime.gc().ptr_type(self.handle.handle()).inner() };
+    fn type_guid(&self, runtime: &Runtime<'r>) -> abi::Guid {
+        let type_info = runtime.gc().ptr_type(self.handle.handle());
         type_info.guid
     }
 
-    fn type_name(&self, runtime: &Runtime) -> &str {
-        let type_info = unsafe { &*runtime.gc().ptr_type(self.handle.handle()).inner() };
+    fn type_name(&self, runtime: &Runtime<'r>) -> &str {
+        let type_info = runtime.gc().ptr_type(self.handle.handle());
         type_info.name()
     }
 
@@ -190,7 +190,7 @@ impl ArgumentReflection for StructRef {
     }
 }
 
-impl ReturnTypeReflection for StructRef {
+impl<'r> ReturnTypeReflection<'r> for StructRef<'r> {
     type Marshalled = RawStruct;
 
     fn type_name() -> &'static str {
@@ -198,22 +198,19 @@ impl ReturnTypeReflection for StructRef {
     }
 }
 
-impl Marshal<StructRef> for RawStruct {
-    fn marshal_value(self, runtime: Rc<RefCell<Runtime>>) -> StructRef {
+impl<'r> Marshal<'r, StructRef<'r>> for RawStruct {
+    fn marshal_value(self, runtime: Rc<RefCell<Runtime<'r>>>) -> StructRef<'r> {
         StructRef::new(runtime, self)
     }
 
     fn marshal_from_ptr(
         ptr: NonNull<Self>,
-        runtime: Rc<RefCell<Runtime>>,
-        type_info: Option<&abi::TypeInfo>,
-    ) -> StructRef {
+        runtime: Rc<RefCell<Runtime<'r>>>,
+        type_info: Option<&'r abi::TypeInfo>,
+    ) -> StructRef<'r> {
         // `type_info` is only `None` for the `()` type
         let type_info = type_info.unwrap();
         let struct_info = type_info.as_struct().unwrap();
-
-        // HACK: This is very hacky since we know nothing about the lifetime of abi::TypeInfo.
-        let type_info_ptr = (type_info as *const abi::TypeInfo).into();
 
         // Copy the contents of the struct based on what kind of pointer we are dealing with
         let gc_handle = if struct_info.memory_kind == abi::StructMemoryKind::Value {
@@ -222,7 +219,7 @@ impl Marshal<StructRef> for RawStruct {
             // Create a new object using the runtime's intrinsic
             let mut gc_handle = {
                 let runtime_ref = runtime.borrow();
-                runtime_ref.gc().alloc(type_info_ptr)
+                runtime_ref.gc().alloc(type_info)
             };
 
             // Construct

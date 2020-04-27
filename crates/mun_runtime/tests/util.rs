@@ -6,21 +6,21 @@ use std::{cell::RefCell, io::stderr, path::PathBuf, rc::Rc, thread::sleep, time:
 
 /// Implements a compiler and runtime in one that can invoke functions. Use of the TestDriver
 /// enables quick testing of Mun constructs in the runtime with hot-reloading support.
-pub(crate) struct TestDriver {
+pub(crate) struct TestDriver<'r> {
     _temp_dir: tempfile::TempDir,
     out_path: PathBuf,
     file_id: FileId,
     driver: Driver,
-    runtime: RuntimeOrBuilder,
+    runtime: RuntimeOrBuilder<'r>,
 }
 
-enum RuntimeOrBuilder {
-    Runtime(Rc<RefCell<Runtime>>),
+enum RuntimeOrBuilder<'r> {
+    Runtime(Rc<RefCell<Runtime<'r>>>),
     Builder(RuntimeBuilder),
     Pending,
 }
 
-impl RuntimeOrBuilder {
+impl<'r> RuntimeOrBuilder<'r> {
     pub fn spawn(&mut self) -> Result<(), failure::Error> {
         let previous = std::mem::replace(self, RuntimeOrBuilder::Pending);
         let runtime = match previous {
@@ -33,7 +33,7 @@ impl RuntimeOrBuilder {
     }
 }
 
-impl TestDriver {
+impl<'r> TestDriver<'r> {
     /// Construct a new TestDriver from a single Mun source
     pub fn new(text: &str) -> Self {
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -100,7 +100,7 @@ impl TestDriver {
     }
 
     /// Returns the `Runtime` used by this instance
-    pub fn runtime_mut(&mut self) -> &mut Rc<RefCell<Runtime>> {
+    pub fn runtime_mut(&mut self) -> &mut Rc<RefCell<Runtime<'r>>> {
         self.runtime.spawn().unwrap();
         match &mut self.runtime {
             RuntimeOrBuilder::Runtime(r) => r,

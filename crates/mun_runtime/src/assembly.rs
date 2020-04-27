@@ -8,25 +8,25 @@ use libloading::Symbol;
 mod temp_library;
 
 use self::temp_library::TempLibrary;
-use crate::garbage_collector::{GarbageCollector, RawTypeInfo};
+use crate::garbage_collector::GarbageCollector;
 use memory::{diff::diff, mapping::MemoryMapper};
 use std::{collections::HashSet, sync::Arc};
 
 /// An assembly is a hot reloadable compilation unit, consisting of one or more Mun modules.
-pub struct Assembly {
+pub struct Assembly<'r> {
     library_path: PathBuf,
     library: TempLibrary,
     legacy_libs: Vec<TempLibrary>,
     info: AssemblyInfo,
-    allocator: Arc<GarbageCollector>,
+    allocator: Arc<GarbageCollector<'r>>,
 }
 
-impl Assembly {
+impl<'r> Assembly<'r> {
     /// Loads an assembly and its information for the shared library at `library_path`. The
     /// resulting `Assembly` is ensured to be linkable.
     pub fn load(
         library_path: &Path,
-        gc: Arc<GarbageCollector>,
+        gc: Arc<GarbageCollector<'r>>,
         runtime_dispatch_table: &DispatchTable,
     ) -> Result<Self, failure::Error> {
         let library = TempLibrary::new(library_path)?;
@@ -145,25 +145,12 @@ impl Assembly {
         let mut new_assembly =
             Assembly::load(library_path, self.allocator.clone(), runtime_dispatch_table)?;
 
-        let old_types: Vec<RawTypeInfo> = self
-            .info
-            .symbols
-            .types()
-            .iter()
-            .map(|ty| (*ty as *const abi::TypeInfo).into())
-            .collect();
-
-        let new_types: Vec<RawTypeInfo> = new_assembly
-            .info
-            .symbols
-            .types()
-            .iter()
-            .map(|ty| (*ty as *const abi::TypeInfo).into())
-            .collect();
+        let old_types = self.info.symbols.types();
+        let new_types = new_assembly.info.symbols.types();
 
         let deleted_objects =
             self.allocator
-                .map_memory(&old_types, &new_types, &diff(&old_types, &new_types));
+                .map_memory(old_types, new_types, &diff(&old_types, &new_types));
 
         // Remove the old assembly's functions
         for function in self.info.symbols.functions() {

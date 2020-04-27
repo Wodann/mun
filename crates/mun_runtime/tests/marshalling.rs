@@ -328,9 +328,10 @@ fn marshal_struct() {
     struct TestData<T>(T, T);
 
     fn test_field<
-        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection + ReturnTypeReflection,
+        'r,
+        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection<'r> + ReturnTypeReflection<'r>,
     >(
-        s: &mut StructRef,
+        s: &mut StructRef<'r>,
         data: &TestData<T>,
         field_name: &str,
     ) {
@@ -354,7 +355,12 @@ fn marshal_struct() {
     test_field(&mut bar, &int_data, "0");
     test_field(&mut bar, &bool_data, "1");
 
-    fn test_struct(runtime: &Runtime, s: &mut StructRef, c1: StructRef, c2: StructRef) {
+    fn test_struct<'r>(
+        runtime: &Runtime<'r>,
+        s: &mut StructRef<'r>,
+        c1: StructRef<'r>,
+        c2: StructRef<'r>,
+    ) {
         let field_names: Vec<String> = StructRef::type_info(&c1, runtime)
             .as_struct()
             .unwrap()
@@ -410,10 +416,11 @@ fn marshal_struct() {
     test_struct(&driver.runtime_mut().borrow(), &mut baz2, c1, c2);
 
     fn test_shallow_copy<
-        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection + ReturnTypeReflection,
+        'r,
+        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection<'r> + ReturnTypeReflection<'r>,
     >(
-        s1: &mut StructRef,
-        s2: &StructRef,
+        s1: &mut StructRef<'r>,
+        s2: &StructRef<'r>,
         data: &TestData<T>,
         field_name: &str,
     ) {
@@ -533,9 +540,10 @@ fn test_primitive_types() {
     );
 
     fn test_field<
-        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection + ReturnTypeReflection,
+        'r,
+        T: Copy + std::fmt::Debug + PartialEq + ArgumentReflection<'r> + ReturnTypeReflection<'r>,
     >(
-        s: &mut StructRef,
+        s: &mut StructRef<'r>,
         data: (T, T),
         field_name: &str,
     ) {

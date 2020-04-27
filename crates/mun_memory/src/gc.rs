@@ -53,6 +53,48 @@ pub trait Observer: Send + Sync {
     fn event(&self, _event: Self::Event) {}
 }
 
+pub struct Trace<'t> {
+    obj: GcPtr,
+    ty: &'t abi::TypeInfo,
+    index: usize,
+}
+
+impl<'t> Iterator for Trace<'t> {
+    type Item = GcPtr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let struct_ty = self.ty.as_struct()?;
+        let field_count = struct_ty.field_types().len();
+        while self.index < field_count {
+            let index = self.index;
+            self.index += 1;
+
+            let field_ty = struct_ty.field_types()[index];
+            if let Some(field_struct_ty) = field_ty.as_struct() {
+                if field_struct_ty.memory_kind == abi::StructMemoryKind::GC {
+                    let offset = struct_ty.field_offsets()[index];
+                    return Some(unsafe {
+                        *self.obj.deref::<u8>().add(offset as usize).cast::<GcPtr>()
+                    });
+                }
+            }
+        }
+        None
+    }
+}
+
+impl<'a> TypeTrace for &'a abi::TypeInfo {
+    type Trace = Trace<'a>;
+
+    fn trace(&self, obj: GcPtr) -> Self::Trace {
+        Trace {
+            ty: *self,
+            obj,
+            index: 0,
+        }
+    }
+}
+
 /// An `Event` is an event that can be emitted by a `GcRuntime` through the use of an `Observer`.
 /// This enables tracking of the runtimes behavior which is useful for testing.
 #[derive(Debug, Clone, PartialEq, Eq)]

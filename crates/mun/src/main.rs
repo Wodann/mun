@@ -168,7 +168,7 @@ fn compiler_options(matches: &ArgMatches) -> Result<mun_compiler::CompilerOption
     })
 }
 
-fn runtime(matches: &ArgMatches) -> Result<Runtime, failure::Error> {
+fn runtime<'r>(matches: &ArgMatches) -> Result<Runtime<'r>, failure::Error> {
     let builder = RuntimeBuilder::new(
         matches.value_of("LIBRARY").unwrap(), // Safe because its a required arg
     );

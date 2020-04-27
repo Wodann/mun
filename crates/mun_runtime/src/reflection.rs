@@ -2,8 +2,8 @@ use crate::{marshal::Marshal, Runtime, StructRef};
 use abi::HasStaticTypeInfo;
 
 /// Returns whether the specified argument type matches the `type_info`.
-pub fn equals_argument_type<'r, 'e, 'f, T: ArgumentReflection>(
-    runtime: &'r Runtime,
+pub fn equals_argument_type<'r, 'e, 'f, T: ArgumentReflection<'r>>(
+    runtime: &'f Runtime<'r>,
     type_info: &'e abi::TypeInfo,
     arg: &'f T,
 ) -> Result<(), (&'e str, &'f str)> {
@@ -15,7 +15,7 @@ pub fn equals_argument_type<'r, 'e, 'f, T: ArgumentReflection>(
 }
 
 /// Returns whether the specified return type matches the `type_info`.
-pub fn equals_return_type<T: ReturnTypeReflection>(
+pub fn equals_return_type<'r, T: ReturnTypeReflection<'r>>(
     type_info: &abi::TypeInfo,
 ) -> Result<(), (&str, &str)> {
     match type_info.group {
@@ -34,9 +34,9 @@ pub fn equals_return_type<T: ReturnTypeReflection>(
 }
 
 /// A type to emulate dynamic typing across compilation units for static types.
-pub trait ReturnTypeReflection: Sized {
+pub trait ReturnTypeReflection<'r>: Sized + 'r {
     /// The resulting type after marshaling.
-    type Marshalled: Marshal<Self>;
+    type Marshalled: Marshal<'r, Self>;
 
     /// Retrieves the type's `Guid`.
     fn type_guid() -> abi::Guid {
@@ -50,15 +50,15 @@ pub trait ReturnTypeReflection: Sized {
 }
 
 /// A type to emulate dynamic typing across compilation units for statically typed values.
-pub trait ArgumentReflection: Sized {
+pub trait ArgumentReflection<'r>: Sized + 'r {
     /// The resulting type after dereferencing.
-    type Marshalled: Marshal<Self>;
+    type Marshalled: Marshal<'r, Self>;
 
     /// Retrieves the `Guid` of the value's type.
-    fn type_guid(&self, runtime: &Runtime) -> abi::Guid;
+    fn type_guid(&self, runtime: &Runtime<'r>) -> abi::Guid;
 
     /// Retrieves the name of the value's type.
-    fn type_name(&self, runtime: &Runtime) -> &str;
+    fn type_name<'s>(&'s self, runtime: &'s Runtime<'r>) -> &'s str;
 
     /// Marshals the value.
     fn marshal(self) -> Self::Marshalled;
@@ -67,14 +67,14 @@ pub trait ArgumentReflection: Sized {
 macro_rules! impl_primitive_type {
     ($($ty:ty),+) => {
         $(
-            impl ArgumentReflection for $ty {
+            impl<'r> ArgumentReflection<'r> for $ty {
                 type Marshalled = Self;
 
-                fn type_guid(&self, _runtime: &Runtime) -> abi::Guid {
+                fn type_guid(&self, _runtime: &Runtime<'r>) -> abi::Guid {
                     Self::type_info().guid
                 }
 
-                fn type_name(&self, _runtime: &Runtime) -> &str {
+                fn type_name(&self, _runtime: &Runtime<'r>) -> &str {
                     Self::type_info().name()
                 }
 
@@ -83,7 +83,7 @@ macro_rules! impl_primitive_type {
                 }
             }
 
-            impl ReturnTypeReflection for $ty {
+            impl<'r> ReturnTypeReflection<'r> for $ty {
                 type Marshalled = Self;
 
                 fn type_guid() -> abi::Guid {
@@ -102,7 +102,7 @@ impl_primitive_type!(
     i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64, bool
 );
 
-impl ReturnTypeReflection for () {
+impl<'r> ReturnTypeReflection<'r> for () {
     type Marshalled = ();
 
     fn type_name() -> &'static str {
@@ -110,9 +110,10 @@ impl ReturnTypeReflection for () {
     }
 }
 
-impl<T> ArgumentReflection for *const T
+impl<'r, T> ArgumentReflection<'r> for *const T
 where
     *const T: HasStaticTypeInfo,
+    T: 'r,
 {
     type Marshalled = Self;
 
@@ -129,9 +130,10 @@ where
     }
 }
 
-impl<T> ReturnTypeReflection for *const T
+impl<'r, T> ReturnTypeReflection<'r> for *const T
 where
     *const T: HasStaticTypeInfo,
+    T: 'r,
 {
     type Marshalled = Self;
 
@@ -144,9 +146,10 @@ where
     }
 }
 
-impl<T> ArgumentReflection for *mut T
+impl<'r, T> ArgumentReflection<'r> for *mut T
 where
     *mut T: HasStaticTypeInfo,
+    T: 'r,
 {
     type Marshalled = Self;
 
@@ -163,9 +166,10 @@ where
     }
 }
 
-impl<T> ReturnTypeReflection for *mut T
+impl<'r, T> ReturnTypeReflection<'r> for *mut T
 where
     *mut T: HasStaticTypeInfo,
+    T: 'r,
 {
     type Marshalled = Self;
 
